@@ -1,0 +1,35 @@
+{
+  "name": "budget-calculator",
+  "version": "1.0.0",
+  "description": "Family budget planner for financial goals",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "db:migrate": "prisma migrate dev",
+    "db:generate": "prisma generate",
+    "db:studio": "prisma studio",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@fastify/helmet": "^13.0.2",
+    "@prisma/client": "^5.15.0",
+    "axios": "^1.7.2",
+    "dotenv": "^16.4.5",
+    "fastify": "^5.8.4",
+    "node-cron": "^3.0.3",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@faker-js/faker": "^8.4.1",
+    "@types/node": "^20.14.9",
+    "@types/node-cron": "^3.0.11",
+    "prisma": "^5.15.0",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.3",
+    "vitest": "^3.2.4"
+  }
+}

@@ -1,0 +1,260 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Currency {
+  NIS
+  USD
+  EUR
+}
+
+enum ExpenseCategory {
+  HOUSING
+  TRANSPORT
+  FOOD
+  UTILITIES
+  SUBSCRIPTIONS
+  OTHER
+}
+
+enum AssetType {
+  BANK_ACCOUNT
+  TRADING_ACCOUNT
+  EDUCATION_FUND
+  INVESTMENT_GEMEL
+  GEMEL
+  PENSION_FUND
+  KEREN_KASPIT
+}
+
+enum GoalStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  PAUSED
+}
+
+// ─── Monthly Snapshot ────────────────────────────────────────────────────────
+
+// NOTE: The @@unique below is a Prisma-level approximation.
+// For full correctness, a raw migration adds two partial unique indexes:
+//   UNIQUE (year, month) WHERE is_draft = false   → only one finalized snapshot per month
+//   UNIQUE (year, month) WHERE is_draft = true    → only one draft per month
+// See prisma/migrations/README.md for details.
+// TODO: future multi-user support requires adding user_id FK here and to all owned models.
+model MonthlySnapshot {
+  id           String    @id @default(cuid())
+  year         Int
+  month        Int
+  is_draft     Boolean   @default(false)
+  finalized_at DateTime?
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  income_sources    IncomeSource[]
+  fixed_expenses    FixedExpense[]
+  one_time_expenses OneTimeExpense[]
+  asset_snapshots   AssetSnapshot[]
+
+  @@unique([year, month, is_draft])
+  @@index([year, month])
+  @@map("monthly_snapshots")
+}
+
+// ─── Income ──────────────────────────────────────────────────────────────────
+
+model IncomeSource {
+  id          String   @id @default(cuid())
+  snapshot_id String
+  name        String
+  amount      Decimal  @db.Decimal(12, 2)
+  currency    Currency @default(NIS)
+  amount_nis  Decimal  @db.Decimal(12, 2)
+  created_at  DateTime @default(now())
+
+  snapshot MonthlySnapshot @relation(fields: [snapshot_id], references: [id], onDelete: Cascade)
+
+  @@index([snapshot_id])
+  @@map("income_sources")
+}
+
+// ─── Expenses ────────────────────────────────────────────────────────────────
+
+model FixedExpense {
+  id                String          @id @default(cuid())
+  snapshot_id       String
+  name              String
+  amount            Decimal         @db.Decimal(12, 2)
+  currency          Currency        @default(NIS)
+  amount_nis        Decimal         @db.Decimal(12, 2)
+  category          ExpenseCategory @default(OTHER)
+  // Self-relation: tracks which prior-month expense this was copied from.
+  // SetNull on delete means the chain breaks gracefully rather than blocking deletes.
+  source_expense_id String?
+  source_expense    FixedExpense?   @relation("ExpenseCarryover", fields: [source_expense_id], references: [id], onDelete: SetNull)
+  carried_to        FixedExpense[]  @relation("ExpenseCarryover")
+  // Loan injection: rows managed by goal activation/deactivation, not user-editable.
+  is_loan_payment   Boolean         @default(false)
+  loan_payment_id   String?
+  loan_payment      LoanPayment?    @relation(fields: [loan_payment_id], references: [id], onDelete: SetNull)
+  created_at        DateTime        @default(now())
+
+  snapshot MonthlySnapshot @relation(fields: [snapshot_id], references: [id], onDelete: Cascade)
+
+  @@index([snapshot_id])
+  @@index([source_expense_id])
+  @@index([loan_payment_id])
+  @@map("fixed_expenses")
+}
+
+model OneTimeExpense {
+  id          String          @id @default(cuid())
+  snapshot_id String
+  name        String
+  amount      Decimal         @db.Decimal(12, 2)
+  currency    Currency        @default(NIS)
+  amount_nis  Decimal         @db.Decimal(12, 2)
+  category    ExpenseCategory @default(OTHER)
+  created_at  DateTime        @default(now())
+
+  snapshot MonthlySnapshot @relation(fields: [snapshot_id], references: [id], onDelete: Cascade)
+
+  @@index([snapshot_id])
+  @@map("one_time_expenses")
+}
+
+// ─── Assets ──────────────────────────────────────────────────────────────────
+
+model Asset {
+  id              String    @id @default(cuid())
+  name            String
+  type            AssetType
+  currency        Currency  @default(NIS)
+  show_pct_change Boolean   @default(true)
+  is_active       Boolean   @default(true)
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  snapshots AssetSnapshot[]
+
+  @@map("assets")
+}
+
+model AssetSnapshot {
+  id          String   @id @default(cuid())
+  asset_id    String
+  snapshot_id String
+  value       Decimal  @db.Decimal(14, 2)
+  value_nis   Decimal  @db.Decimal(14, 2)
+  created_at  DateTime @default(now())
+
+  asset    Asset           @relation(fields: [asset_id], references: [id], onDelete: Cascade)
+  snapshot MonthlySnapshot @relation(fields: [snapshot_id], references: [id], onDelete: Cascade)
+
+  @@unique([asset_id, snapshot_id])
+  @@index([asset_id])
+  @@index([snapshot_id])
+  @@map("asset_snapshots")
+}
+
+// ─── Goals ───────────────────────────────────────────────────────────────────
+
+model Goal {
+  id           String     @id @default(cuid())
+  name         String
+  description  String?
+  total_cost   Decimal    @db.Decimal(12, 2)
+  currency     Currency   @default(NIS)
+  status       GoalStatus @default(DRAFT)
+  activated_at DateTime?
+  created_at   DateTime   @default(now())
+  updated_at   DateTime   @updatedAt
+
+  sections GoalSection[]
+  loan     Loan?
+
+  @@map("goals")
+}
+
+model GoalSection {
+  id          String   @id @default(cuid())
+  goal_id     String
+  name        String
+  description String?
+  cost        Decimal  @db.Decimal(12, 2)
+  // Defaults to parent goal's currency; set explicitly if different.
+  currency    Currency @default(NIS)
+  order       Int
+  is_complete Boolean  @default(false)
+
+  goal Goal @relation(fields: [goal_id], references: [id], onDelete: Cascade)
+
+  @@index([goal_id])
+  @@map("goal_sections")
+}
+
+// ─── Loans ───────────────────────────────────────────────────────────────────
+
+model Loan {
+  id              String   @id @default(cuid())
+  goal_id         String   @unique
+  total_amount    Decimal  @db.Decimal(12, 2)
+  currency        Currency @default(NIS)
+  spread_months   Int
+  // Stored as a decimal fraction: 0.045 = 4.5% annual rate. Max: 9.9999 (999.99%).
+  annual_rate     Decimal  @db.Decimal(5, 4)
+  monthly_payment Decimal  @db.Decimal(12, 2)
+  start_month     Int?
+  start_year      Int?
+  created_at      DateTime @default(now())
+
+  goal     Goal          @relation(fields: [goal_id], references: [id], onDelete: Cascade)
+  payments LoanPayment[]
+
+  @@map("loans")
+}
+
+model LoanPayment {
+  id          String   @id @default(cuid())
+  loan_id     String
+  // year + month identify which calendar month this payment falls in.
+  // No FK to MonthlySnapshot — the snapshot may not exist yet when the goal is activated.
+  // injectLoanPayments() queries by (year, month) when a snapshot is created.
+  year        Int
+  month       Int
+  payment_num Int
+  amount      Decimal  @db.Decimal(12, 2)
+  // Currency is always inherited from the parent Loan.currency.
+  amount_nis  Decimal  @db.Decimal(12, 2)
+  created_at  DateTime @default(now())
+
+  loan           Loan         @relation(fields: [loan_id], references: [id], onDelete: Cascade)
+  fixed_expenses FixedExpense[]
+
+  @@unique([loan_id, payment_num])
+  @@index([loan_id])
+  @@index([year, month])
+  @@map("loan_payments")
+}
+
+// ─── Currency ────────────────────────────────────────────────────────────────
+
+model ExchangeRate {
+  id         String   @id @default(cuid())
+  from       Currency
+  to         Currency @default(NIS)
+  rate       Decimal  @db.Decimal(10, 6)
+  fetched_at DateTime @default(now())
+
+  // Unique constraint prevents duplicate inserts from race conditions in the cron job.
+  // Also serves as the primary query index for latest-rate lookups.
+  @@unique([from, to, fetched_at])
+  @@map("exchange_rates")
+}
