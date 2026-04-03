@@ -27,6 +27,11 @@ export const RecordAssetValueSchema = z.object({
   value: z.number().positive(),
 })
 
+export const AssetTotalsQuery = z.object({
+  snapshotId: z.string().cuid().optional(),
+})
+export type AssetTotalsQuery = z.infer<typeof AssetTotalsQuery>
+
 export type CreateAsset = z.infer<typeof CreateAssetSchema>
 export type UpdateAsset = z.infer<typeof UpdateAssetSchema>
 export type RecordAssetValue = z.infer<typeof RecordAssetValueSchema>

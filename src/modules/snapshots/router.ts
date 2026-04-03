@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import * as service from './service'
 import { CreateSnapshotSchema, ListSnapshotsSchema } from './schema'
+import { IdParam } from '../../utils/paramSchemas'
 
 export async function snapshotRoutes(app: FastifyInstance) {
   app.post('/', async (req, reply) => {
@@ -15,22 +16,22 @@ export async function snapshotRoutes(app: FastifyInstance) {
   })
 
   app.get('/:id', async (req, reply) => {
-    const { id } = req.params as { id: string }
+    const { id } = IdParam.parse(req.params)
     return service.getSnapshot(id)
   })
 
   app.get('/:id/summary', async (req, reply) => {
-    const { id } = req.params as { id: string }
+    const { id } = IdParam.parse(req.params)
     return service.getSnapshotSummary(id)
   })
 
   app.patch('/:id/finalize', async (req, reply) => {
-    const { id } = req.params as { id: string }
+    const { id } = IdParam.parse(req.params)
     return service.finalizeSnapshot(id)
   })
 
   app.delete('/:id', async (req, reply) => {
-    const { id } = req.params as { id: string }
+    const { id } = IdParam.parse(req.params)
     await service.deleteSnapshot(id)
     return reply.code(204).send()
   })

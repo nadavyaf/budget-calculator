@@ -43,6 +43,11 @@ export const CreateLoanSchema = z.object({
 
 export const UpdateLoanSchema = CreateLoanSchema.partial()
 
+export const ListGoalsQuery = z.object({
+  status: z.enum(['DRAFT', 'ACTIVE', 'PAUSED', 'COMPLETED']).optional(),
+})
+export type ListGoalsQuery = z.infer<typeof ListGoalsQuery>
+
 export type CreateGoal = z.infer<typeof CreateGoalSchema>
 export type UpdateGoal = z.infer<typeof UpdateGoalSchema>
 export type CreateSection = z.infer<typeof CreateSectionSchema>

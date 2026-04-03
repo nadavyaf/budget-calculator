@@ -12,5 +12,10 @@ export const CreateExpenseSchema = z.object({
 
 export const UpdateExpenseSchema = CreateExpenseSchema.partial()
 
+export const ListExpensesQuery = z.object({
+  category: CategoryEnum.optional(),
+})
+export type ListExpensesQuery = z.infer<typeof ListExpensesQuery>
+
 export type CreateExpense = z.infer<typeof CreateExpenseSchema>
 export type UpdateExpense = z.infer<typeof UpdateExpenseSchema>
