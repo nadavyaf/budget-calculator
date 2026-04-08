@@ -27,7 +27,6 @@ export interface Goal {
   id: string
   name: string
   description: string | null
-  total_cost: number | null
   currency: string
   status: 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'COMPLETED'
   activated_at: string | null

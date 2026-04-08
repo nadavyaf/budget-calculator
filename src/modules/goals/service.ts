@@ -12,7 +12,6 @@ export async function createGoal(data: CreateGoal) {
     data: {
       name: data.name,
       description: data.description,
-      total_cost: data.total_cost,
       currency: data.currency as Currency,
     },
     include: { sections: true, loan: true },

@@ -170,7 +170,6 @@ model Goal {
   id           String     @id @default(cuid())
   name         String
   description  String?
-  total_cost   Decimal    @db.Decimal(12, 2)
   currency     Currency   @default(NIS)
   status       GoalStatus @default(DRAFT)
   activated_at DateTime?

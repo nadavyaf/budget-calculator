@@ -5,14 +5,12 @@ const CurrencyEnum = z.enum(['NIS', 'USD', 'EUR'])
 export const CreateGoalSchema = z.object({
   name: z.string().min(1).max(200),
   description: z.string().optional(),
-  total_cost: z.number().positive(),
   currency: CurrencyEnum.default('NIS'),
 })
 
 export const UpdateGoalSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   description: z.string().optional(),
-  total_cost: z.number().positive().optional(),
   currency: CurrencyEnum.optional(),
   status: z.enum(['COMPLETED']).optional(), // only COMPLETED is user-settable; ACTIVE/PAUSED via activate/deactivate
 })

@@ -9,6 +9,19 @@ function fmt(n: number | string) {
   return new Intl.NumberFormat('en-IL', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Number(n))
 }
 
+function sectionTotal(sections: GoalSection[]): string {
+  const totals: Record<string, number> = {}
+  for (const s of sections) {
+    if (s.cost) totals[s.currency] = (totals[s.currency] ?? 0) + Number(s.cost)
+  }
+  const entries = Object.entries(totals)
+  if (entries.length === 0) return ''
+  return entries.map(([cur, amt]) => {
+    const sym = cur === 'NIS' ? '₪' : cur === 'USD' ? '$' : '€'
+    return `${sym}${fmt(amt)}`
+  }).join(' + ')
+}
+
 function StatusBadge({ status }: { status: Goal['status'] }) {
   const map: Record<Goal['status'], string> = {
     DRAFT: 'badge-draft', ACTIVE: 'badge-active', PAUSED: 'badge-paused', COMPLETED: 'badge-completed',
@@ -34,10 +47,12 @@ export default function Goals() {
   const [showAddLoan, setShowAddLoan] = useState(false)
   const [confirmAction, setConfirmAction] = useState<{ type: 'activate' | 'deactivate' | 'delete'; goal: Goal } | null>(null)
   const [deleteSection, setDeleteSection] = useState<GoalSection | null>(null)
+  const [editSection, setEditSection] = useState<GoalSection | null>(null)
 
   // Forms
-  const [goalForm, setGoalForm] = useState({ name: '', description: '', total_cost: '', currency: 'NIS' })
+  const [goalForm, setGoalForm] = useState({ name: '', description: '', currency: 'NIS' })
   const [sectionForm, setSectionForm] = useState({ name: '', description: '', cost: '', currency: 'NIS', order: '0' })
+  const [editSectionForm, setEditSectionForm] = useState({ name: '', description: '', cost: '', currency: 'NIS', order: '0' })
   const [loanForm, setLoanForm] = useState({ total_amount: '', currency: 'NIS', spread_months: '12', annual_rate: '' })
 
   useEffect(() => {
@@ -53,13 +68,12 @@ export default function Goals() {
       const goal = await goalsApi.create({
         name: goalForm.name,
         description: goalForm.description || undefined,
-        total_cost: goalForm.total_cost ? Number(goalForm.total_cost) : undefined,
         currency: goalForm.currency,
       })
       setGoals(p => [goal, ...p])
       setSelected(goal)
       setShowAddGoal(false)
-      setGoalForm({ name: '', description: '', total_cost: '', currency: 'NIS' })
+      setGoalForm({ name: '', description: '', currency: 'NIS' })
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : 'Error')
     } finally { setSubmitting(false) }
@@ -123,6 +137,32 @@ export default function Goals() {
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : 'Error')
     }
+  }
+
+  const openEditSection = (s: GoalSection) => {
+    setEditSection(s)
+    setEditSectionForm({ name: s.name, description: s.description ?? '', cost: s.cost ? String(s.cost) : '', currency: s.currency, order: String(s.order) })
+    setErr('')
+  }
+
+  const handleEditSection = async () => {
+    if (!selected || !editSection) return
+    setSubmitting(true); setErr('')
+    try {
+      const updated_section = await goalsApi.updateSection(selected.id, editSection.id, {
+        name: editSectionForm.name,
+        description: editSectionForm.description || undefined,
+        cost: editSectionForm.cost ? Number(editSectionForm.cost) : undefined,
+        currency: editSectionForm.currency,
+        order: Number(editSectionForm.order),
+      })
+      const updated = { ...selected, sections: selected.sections.map(s => s.id === updated_section.id ? updated_section : s).sort((a, b) => a.order - b.order) }
+      setSelected(updated)
+      setGoals(p => p.map(g => g.id === updated.id ? updated : g))
+      setEditSection(null)
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : 'Error')
+    } finally { setSubmitting(false) }
   }
 
   const handleDeleteSection = async () => {
@@ -224,8 +264,8 @@ export default function Goals() {
                 <div className="goal-name" style={{ fontSize: '0.95rem' }}>{goal.name}</div>
                 <StatusBadge status={goal.status} />
               </div>
-              {goal.total_cost && (
-                <div className="goal-cost">₪{fmt(goal.total_cost)}</div>
+              {sectionTotal(goal.sections) && (
+                <div className="goal-cost">{sectionTotal(goal.sections)}</div>
               )}
               {goal.loan && (
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-2)', marginTop: 6 }}>
@@ -251,9 +291,9 @@ export default function Goals() {
                   )}
                   <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                     <StatusBadge status={selected.status} />
-                    {selected.total_cost && (
+                    {sectionTotal(selected.sections) && (
                       <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--text-1)' }}>
-                        ₪{fmt(selected.total_cost)} total
+                        {sectionTotal(selected.sections)} total
                       </span>
                     )}
                   </div>
@@ -326,6 +366,11 @@ export default function Goals() {
                           {s.cost ? `${s.currency === 'NIS' ? '₪' : s.currency === 'USD' ? '$' : '€'}${fmt(s.cost)}` : '—'}
                         </td>
                         <td className="td-actions">
+                          <button className="btn-icon" onClick={() => openEditSection(s)}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                            </svg>
+                          </button>
                           <button className="btn-icon" style={{ color: 'var(--red)' }} onClick={() => setDeleteSection(s)}>
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                               <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
@@ -423,17 +468,11 @@ export default function Goals() {
             <label className="form-label">Description <span style={{ opacity: 0.5 }}>(optional)</span></label>
             <input className="form-input" value={goalForm.description} onChange={e => setGoalForm(p => ({ ...p, description: e.target.value }))} placeholder="Brief description" />
           </div>
-          <div className="form-row">
-            <div className="form-field">
-              <label className="form-label">Total cost <span style={{ opacity: 0.5 }}>(optional)</span></label>
-              <input className="form-input" type="number" value={goalForm.total_cost} onChange={e => setGoalForm(p => ({ ...p, total_cost: e.target.value }))} placeholder="0" />
-            </div>
-            <div className="form-field">
-              <label className="form-label">Currency</label>
-              <select className="form-select" value={goalForm.currency} onChange={e => setGoalForm(p => ({ ...p, currency: e.target.value }))}>
-                {CURRENCIES.map(c => <option key={c}>{c}</option>)}
-              </select>
-            </div>
+          <div className="form-field">
+            <label className="form-label">Currency</label>
+            <select className="form-select" value={goalForm.currency} onChange={e => setGoalForm(p => ({ ...p, currency: e.target.value }))}>
+              {CURRENCIES.map(c => <option key={c}>{c}</option>)}
+            </select>
           </div>
         </Modal>
       )}
@@ -469,6 +508,44 @@ export default function Goals() {
             <div className="form-field">
               <label className="form-label">Currency</label>
               <select className="form-select" value={sectionForm.currency} onChange={e => setSectionForm(p => ({ ...p, currency: e.target.value }))}>
+                {CURRENCIES.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Edit section modal */}
+      {editSection && selected && (
+        <Modal
+          title="Edit section"
+          onClose={() => { setEditSection(null); setErr('') }}
+          footer={
+            <>
+              <button className="btn btn-ghost" onClick={() => setEditSection(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleEditSection} disabled={submitting}>
+                {submitting ? 'Saving…' : 'Save'}
+              </button>
+            </>
+          }
+        >
+          {err && <div className="error-msg">{err}</div>}
+          <div className="form-field">
+            <label className="form-label">Name</label>
+            <input className="form-input" value={editSectionForm.name} onChange={e => setEditSectionForm(p => ({ ...p, name: e.target.value }))} />
+          </div>
+          <div className="form-field">
+            <label className="form-label">Description <span style={{ opacity: 0.5 }}>(optional)</span></label>
+            <input className="form-input" value={editSectionForm.description} onChange={e => setEditSectionForm(p => ({ ...p, description: e.target.value }))} />
+          </div>
+          <div className="form-row">
+            <div className="form-field">
+              <label className="form-label">Cost <span style={{ opacity: 0.5 }}>(optional)</span></label>
+              <input className="form-input" type="number" value={editSectionForm.cost} onChange={e => setEditSectionForm(p => ({ ...p, cost: e.target.value }))} placeholder="0" />
+            </div>
+            <div className="form-field">
+              <label className="form-label">Currency</label>
+              <select className="form-select" value={editSectionForm.currency} onChange={e => setEditSectionForm(p => ({ ...p, currency: e.target.value }))}>
                 {CURRENCIES.map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
